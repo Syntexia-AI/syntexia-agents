@@ -74,6 +74,11 @@
             ]
           }
         },
+        "asvs_refs": {
+          "type": "array",
+          "description": "ASVS 5.0 requirement ids this finding violates (e.g. V6.2.1). Consumed by generate_asvs_matrix.py to mark those requirements non conforme. Optional; leave empty rather than guess.",
+          "items": { "type": "string" }
+        },
         "occurrences": {
           "type": "array",
           "description": "Additional file:line sites of the same pattern, folded into one finding.",
