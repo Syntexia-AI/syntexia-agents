@@ -22,4 +22,4 @@ Method:
 
 Severity: known-exploited or critical CVE with network-reachable usage P0/P1 depending on reachability evidence from SURFACE. Fix available and trivial P2. Informational P3.
 
-Output contract: one finding per issue with id, title, severity, confidence, package, installed_version, fixed_version, file (lockfile or manifest), evidence, impact, fix_hint, verified. End with scans run, exit codes, ecosystems covered, ecosystems skipped and why.
+Output contract: write a single JSON object to /tmp/sweep/dependency-auditor.json conforming to .claude/templates/findings.schema.json (the orchestrator consolidates from this file, not from prose). category is "dependency". Put package, installed_version and fixed_version detail inside evidence and impact. The scans array lists every scan run with exit_code and status; clean_checks lists ecosystems covered and those skipped with the reason. Also print a short human summary after writing the file.

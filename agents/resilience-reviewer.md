@@ -20,4 +20,4 @@ Method:
 6. Process supervision as vendored in the repo: restart policy, graceful shutdown handling for in-flight interactions, startup order and dependency waits, healthcheck endpoints actually wired to something.
 7. Time and locale: timezone handling on scheduling logic, DST-sensitive computations, naive/aware datetime mixing.
 
-Output contract: findings with id, title, severity, confidence, file, line, evidence, impact, fix_hint, verified, plus a table of external write operations with their idempotency status. Anything not traceable in code is NON VERIFIE.
+Output contract: write a single JSON object to /tmp/sweep/resilience-reviewer.json conforming to .claude/templates/findings.schema.json (the orchestrator consolidates from this file, not from prose). category is "resilience". The table of external write operations with their idempotency status goes in clean_checks as text lines. Anything not traceable in code is NON VERIFIE. Also print a short human summary after writing the file.

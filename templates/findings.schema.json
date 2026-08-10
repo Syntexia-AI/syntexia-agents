@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://syntexia.internal/findings.schema.json",
+  "title": "Syntexia security sweep : agent output",
+  "description": "Every fleet agent ends its run by emitting one object of this shape to /tmp/sweep/<agent>.json. Consolidation is scripted, not read from prose.",
+  "type": "object",
+  "required": ["agent", "findings", "scans", "clean_checks"],
+  "additionalProperties": false,
+  "properties": {
+    "agent": {
+      "type": "string",
+      "description": "Emitting agent name, must match a fleet agent."
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/finding" }
+    },
+    "scans": {
+      "type": "array",
+      "description": "Every scan that ran, its exit code and status. Empty for pure-analyst agents.",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "exit_code": { "type": ["integer", "null"] },
+          "status": { "type": "string", "enum": ["ran", "missing", "error", "skipped"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "clean_checks": {
+      "type": "array",
+      "description": "Checks that came back clean, stated explicitly so absence of finding is not silence.",
+      "items": { "type": "string" }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["id", "title", "category", "severity", "confidence", "file", "evidence", "impact", "fix_hint", "verified", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3,}$" },
+        "title": { "type": "string", "minLength": 3 },
+        "category": {
+          "type": "string",
+          "enum": ["secret", "dependency", "sast", "authz", "api", "llm", "resilience", "infra", "injection"]
+        },
+        "severity": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "file": { "type": "string" },
+        "line": { "type": ["integer", "null"] },
+        "cwe": { "type": ["string", "null"] },
+        "evidence": { "type": "string" },
+        "impact": { "type": "string" },
+        "fix_hint": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["OPEN", "FIXED", "NEEDS-HUMAN"] },
+        "correlation_tags": {
+          "type": "array",
+          "description": "Controlled vocabulary consumed by consolidate_findings.py escalation rules.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "scope-touches-exposed-route",
+              "unauth-inbound-channel",
+              "reaches-tool-side-effects",
+              "missing-tenant-filter",
+              "reachable-from-surface",
+              "history-only",
+              "dummy-suspected"
+            ]
+          }
+        },
+        "occurrences": {
+          "type": "array",
+          "description": "Additional file:line sites of the same pattern, folded into one finding.",
+          "items": {
+            "type": "object",
+            "required": ["file"],
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": ["integer", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
