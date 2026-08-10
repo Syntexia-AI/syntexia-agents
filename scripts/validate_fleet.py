@@ -110,7 +110,8 @@ try:
     sdata = json.loads(settings.read_text(encoding="utf-8"))
     deny = sdata.get("permissions", {}).get("deny", [])
     required_deny = ["git push", "git merge", "git pull", "git reset --hard",
-                     "git restore", "gh pr create", "gh repo create"]
+                     "git restore", "gh pr create", "gh repo create",
+                     "curl", "wget", "nc", "rm -rf", "dd"]
     for r in required_deny:
         if not any(r in d for d in deny):
             errors.append(f"settings.template.json: permissions.deny ne couvre pas '{r}'")
