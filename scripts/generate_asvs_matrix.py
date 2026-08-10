@@ -24,6 +24,8 @@ import sys
 
 LEVELS = {"L1": {"1"}, "L2": {"1", "2"}, "L3": {"1", "2", "3"}}
 VALID_VERDICTS = {"conforme", "non conforme", "non applicable", "non verifie"}
+BANNER = ("# Triage interne, pas un audit. Verdicts non verifie par defaut. "
+          "A completer par un pentest externe.")
 ATTRIBUTION = ("# ASVS 5.0.0 requirements (c) OWASP Foundation, CC BY-SA 4.0. "
                "Source: https://github.com/OWASP/ASVS release v5.0.0_release. "
                "See .claude/reference/SOURCES.md. Verdicts added by Syntexia fleet.")
@@ -115,6 +117,7 @@ def main():
     if not csv_path:
         # Honest degradation: no reference available.
         with open(out, "w", encoding="utf-8", newline="") as f:
+            f.write(BANNER + "\n")
             f.write(ATTRIBUTION + "\n")
             w = csv.writer(f)
             w.writerow(["req_id", "level", "chapter", "section", "verdict", "evidence", "description"])
@@ -145,6 +148,7 @@ def main():
 
     counts = {"conforme": 0, "non conforme": 0, "non applicable": 0, "non verifie": 0}
     with open(out, "w", encoding="utf-8", newline="") as f:
+        f.write(BANNER + "\n")
         f.write(ATTRIBUTION + "\n")
         w = csv.writer(f)
         w.writerow(["req_id", "level", "chapter", "section", "verdict", "evidence", "description"])

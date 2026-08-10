@@ -16,6 +16,9 @@
 <P0/P1/P2/P3 : ouverts, corriges, needs-human>
 
 ## Matrice ASVS 5.0 (niveau L2 par defaut)
+
+> Triage interne, pas un audit. Verdicts non verifie par defaut. A completer par un pentest externe.
+
 <voir fichier asvs-matrix.csv du meme dossier, genere par generate_asvs_matrix.py>
 
 ## Actions humaines requises
