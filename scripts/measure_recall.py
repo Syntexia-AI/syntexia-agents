@@ -15,6 +15,7 @@ treat a regression as a failure, not an opinion.
 import argparse
 import json
 import pathlib
+import re
 import sys
 
 SEV_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
@@ -24,31 +25,68 @@ def basename(p):
     return (p or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
+def finding_basenames(finding):
+    """Set of file basenames the finding actually points at (file + occurrences)."""
+    names = {basename(finding.get("file"))}
+    for occ in finding.get("occurrences", []) or []:
+        names.add(basename(occ.get("file")))
+    return {n for n in names if n}
+
+
 def finding_text(finding):
-    fields = " ".join([
-        basename(finding.get("file")),
-        (finding.get("file") or ""),
+    """Descriptive text only (NOT the file path), so a token cannot be satisfied by
+    a filename substring."""
+    return " ".join([
         (finding.get("evidence") or ""),
         (finding.get("title") or ""),
         (finding.get("impact") or ""),
         (finding.get("fix_hint") or ""),
-    ])
-    for occ in finding.get("occurrences", []) or []:
-        fields += " " + (occ.get("file") or "")
-    return fields.lower()
+    ]).lower()
+
+
+def token_hit(token, text):
+    """Token match with alphanumeric boundaries, so 'key' does not match 'monkeypatch'
+    while 'shell=True' or 'sk-ant' still match."""
+    t = token.lower()
+    return re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", text) is not None
 
 
 def matches(expected, finding):
     if expected["category"] != finding.get("category"):
         return False
-    text = finding_text(finding)
     exp_file = basename(expected.get("file"))
-    if not exp_file or exp_file not in text:
+    # File match by basename EQUALITY (not substring): a.py must not match data.py.
+    if exp_file and exp_file not in finding_basenames(finding):
+        # Tolerate history-only findings that name the file only in their text, as a
+        # whole token, not as an arbitrary substring.
+        if not token_hit(exp_file, finding_text(finding)):
+            return False
+    tokens = [t for t in expected.get("match_tokens", []) if t]
+    text = finding_text(finding)
+    return any(token_hit(t, text) for t in tokens)
+
+
+def max_bipartite_matching(expected, findings):
+    """Kuhn's algorithm: maximum matching between expected entries and findings, so a
+    complete sweep is never under-counted by greedy assignment. Returns dict
+    expected_index -> finding_index for matched entries."""
+    adj = {ei: [fi for fi, f in enumerate(findings) if matches(exp, f)]
+           for ei, exp in enumerate(expected)}
+    match_f = {}  # finding_index -> expected_index
+
+    def try_assign(ei, seen):
+        for fi in adj[ei]:
+            if fi in seen:
+                continue
+            seen.add(fi)
+            if fi not in match_f or try_assign(match_f[fi], seen):
+                match_f[fi] = ei
+                return True
         return False
-    tokens = [t.lower() for t in expected.get("match_tokens", []) if t]
-    if not tokens:
-        return True
-    return any(t in text for t in tokens)
+
+    for ei in range(len(expected)):
+        try_assign(ei, set())
+    return {ei: fi for fi, ei in match_f.items()}
 
 
 def main():
@@ -59,28 +97,30 @@ def main():
     args = ap.parse_args()
 
     expected = json.loads(pathlib.Path(args.expected).read_text(encoding="utf-8"))["expected"]
+    # Fail loudly on a degenerate expected file rather than credit a false 100%.
+    if not expected:
+        print("ECHEC: expected_findings vide, aucun attendu a mesurer.")
+        return 1
+    tokenless = [e.get("key", "?") for e in expected if not [t for t in e.get("match_tokens", []) if t]]
+    if tokenless:
+        print("ECHEC: entrees attendues sans match_tokens (matching non fiable): " + ", ".join(tokenless))
+        return 1
+
     cons_path = pathlib.Path(args.consolidated)
     if not cons_path.exists():
         print(f"ECHEC: consolidated absent: {cons_path}")
         return 1
     findings = json.loads(cons_path.read_text(encoding="utf-8")).get("findings", [])
 
+    assignment = max_bipartite_matching(expected, findings)
     matched, missed, sev_warn = [], [], []
     per_cat = {}
-    consumed = set()  # indices of findings already assigned, one-to-one
-    for exp in expected:
+    for ei, exp in enumerate(expected):
         cat = exp["category"]
         per_cat.setdefault(cat, {"total": 0, "found": 0})
         per_cat[cat]["total"] += 1
-        hit = None
-        for i, f in enumerate(findings):
-            if i in consumed:
-                continue
-            if matches(exp, f):
-                hit = f
-                consumed.add(i)
-                break
-        if hit:
+        if ei in assignment:
+            hit = findings[assignment[ei]]
             matched.append(exp["key"])
             per_cat[cat]["found"] += 1
             want = exp.get("min_severity")

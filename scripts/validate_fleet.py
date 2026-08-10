@@ -72,6 +72,19 @@ for cmd, should_block in [
     ("git remote -v", False),
     ("gh repo delete x", True),
     ("git commit -m \"reset the counter\"", False),
+    ("git pull", True),
+    ("git pull --rebase", True),
+    ("git restore .", True),
+    ("git restore --staged app.py", False),
+    ("git stash drop", True),
+    ("git stash push", False),
+    ("git commit --amend --no-edit", True),
+    ("gh api -X DELETE repos/o/r", True),
+    ("timeout 300 git push", True),
+    ("git branch -df x", True),
+    ("git branch -d merged", False),
+    ("git.exe push origin main", True),
+    ("git fetch & git push", True),
 ]:
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
     proc = subprocess.run(
@@ -96,7 +109,8 @@ settings = ROOT / "hooks" / "settings.template.json"
 try:
     sdata = json.loads(settings.read_text(encoding="utf-8"))
     deny = sdata.get("permissions", {}).get("deny", [])
-    required_deny = ["git push", "git merge", "git reset --hard", "gh pr create", "gh repo create"]
+    required_deny = ["git push", "git merge", "git pull", "git reset --hard",
+                     "git restore", "gh pr create", "gh repo create"]
     for r in required_deny:
         if not any(r in d for d in deny):
             errors.append(f"settings.template.json: permissions.deny ne couvre pas '{r}'")
@@ -105,12 +119,18 @@ try:
 except Exception as e:
     errors.append(f"settings.template.json illisible: {e}")
 
-# install.sh doit deployer les scripts (l'orchestrateur appelle .claude/scripts/*.py).
+# install.sh doit reellement deployer les scripts d'execution et ecrire FLEET_VERSION
+# (verifications non vacantes: on cherche l'action, pas une mention en commentaire).
 install_sh = (ROOT / "install.sh").read_text(encoding="utf-8")
-if "/scripts/" not in install_sh or "scripts/" not in install_sh:
-    errors.append("install.sh ne copie pas scripts/ vers la cible")
-if "FLEET_VERSION" not in install_sh:
-    errors.append("install.sh n'ecrit pas FLEET_VERSION")
+if 'install_file "$SRC/scripts/$s"' not in install_sh:
+    errors.append("install.sh ne copie pas les scripts d'execution (install_file scripts/$s absent)")
+for runtime in ["consolidate_findings.py", "generate_asvs_matrix.py", "preflight_tooling.py"]:
+    if runtime not in install_sh:
+        errors.append(f"install.sh ne liste pas scripts/{runtime} au deploiement")
+if 'install_file "$SRC/PLAYBOOK.md"' not in install_sh:
+    errors.append("install.sh ne deploie pas PLAYBOOK.md (reference par les agents)")
+if '> "$CLAUDE_DIR/FLEET_VERSION"' not in install_sh or "fleet_commit:" not in install_sh:
+    errors.append("install.sh n'ecrit pas reellement FLEET_VERSION")
 
 # Scripts attendus presents.
 for script in ["consolidate_findings.py", "generate_asvs_matrix.py",

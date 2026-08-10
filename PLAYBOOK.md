@@ -51,6 +51,8 @@ Après installation, deux vérifications :
 
 Note de syntaxe : depuis gitleaks 8.19, `detect` est déprécié. Historique : `gitleaks git .` ; arbre de travail seul : `gitleaks dir .`. Les agents utilisent la syntaxe moderne avec repli sur `detect` si la version installée est antérieure.
 
+Jeu de règles SAST : par défaut, `sast-triager` utilise le jeu de règles intégré du scanner (opengrep/semgrep en mode auto, `--config auto` pour semgrep). Pour imposer un jeu de règles spécifique à un run, définir ici la ligne `sast_ruleset: <chemin ou identifiant>` ; en son absence, le défaut du scanner s'applique et l'agent le consigne comme tel. Aucun jeu de règles propriétaire n'est embarqué dans la flotte.
+
 Versions constatées, à figer ici à la première installation :
 
 - gitleaks : à compléter
@@ -66,7 +68,7 @@ Versions constatées, à figer ici à la première installation :
 - Mode `full` avant toute livraison client, sur le modèle le plus fort disponible.
 - Mode `light` (secrets et dépendances uniquement) en passe hebdomadaire, sur un modèle intermédiaire pour préserver les crédits.
 - Les deux gates sont des décisions humaines. GATE A avant les fixes : réponses exactes attendues `GO FIXES ALL`, `GO FIXES <ids>` ou `STOP`. GATE B avant le rapport : `GO RAPPORT` ou `STOP`. L'orchestrateur n'avance pas sans une de ces réponses.
-- Findings au format machine : chaque agent termine par un objet JSON conforme à `.claude/templates/findings.schema.json`, persisté par l'orchestrateur dans `/tmp/sweep/<agent>.json`. La déduplication et les trois règles de corrélation sont appliquées par `consolidate_findings.py`, pas par lecture de prose. Les règles sont donc testables (`--self-test`, exécuté en CI).
+- Findings au format machine : chaque agent d'analyse (les 9 agents lecture seule) retourne comme dernier bloc de son message un objet JSON conforme à `.claude/templates/findings.schema.json`, que l'orchestrateur persiste dans `/tmp/sweep/agents/<agent>.json` (les 3 agents producteurs utilisent des contrats en prose). La déduplication et les trois règles de corrélation sont appliquées par `consolidate_findings.py --in /tmp/sweep/agents`, pas par lecture de prose. Les règles sont donc testables (`--self-test`, exécuté en CI).
 - Matrice ASVS : générée par `generate_asvs_matrix.py` depuis le CSV de référence et le JSON consolidé. Niveau par défaut : **L2** (les clients entreprise attendent L2 ; L1 reste disponible par option). Verdict par défaut : `non verifie`. Le script ne remplit `conforme` ou `non conforme` que sur pointeur de preuve explicite ; aucun modèle ne remplit la matrice ligne à ligne.
 
 ### Vérification live des secrets : décision explicite obligatoire

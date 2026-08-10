@@ -15,8 +15,8 @@
 ## Findings par severite
 <P0/P1/P2/P3 : ouverts, corriges, needs-human>
 
-## Matrice ASVS 5.0 L1
-<voir fichier asvs-matrix.csv du meme dossier>
+## Matrice ASVS 5.0 (niveau L2 par defaut)
+<voir fichier asvs-matrix.csv du meme dossier, genere par generate_asvs_matrix.py>
 
 ## Actions humaines requises
 <PR a ouvrir, secrets a faire tourner, decisions en attente>

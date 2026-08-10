@@ -3,8 +3,13 @@
     "deny": [
       "Bash(git push:*)",
       "Bash(git merge:*)",
+      "Bash(git pull:*)",
       "Bash(git reset --hard:*)",
       "Bash(git rebase:*)",
+      "Bash(git restore:*)",
+      "Bash(git stash drop:*)",
+      "Bash(git stash clear:*)",
+      "Bash(git commit --amend:*)",
       "Bash(git clean -f:*)",
       "Bash(git clean -d:*)",
       "Bash(git clean -x:*)",

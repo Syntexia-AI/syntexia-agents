@@ -40,9 +40,15 @@ install_file() {  # $1 = fichier source, $2 = chemin relatif sous .claude/
 for f in "$SRC"/agents/*.md;    do install_file "$f" "agents/$(basename "$f")"; done
 for f in "$SRC"/commands/*.md;  do install_file "$f" "commands/$(basename "$f")"; done
 install_file "$SRC/hooks/block_push.py" "hooks/block_push.py"
-for f in "$SRC"/scripts/*.py;   do install_file "$f" "scripts/$(basename "$f")"; done
+# Seuls les scripts d'execution vont dans le repo cible. Les outils de dev de la
+# flotte (validate_fleet, hygiene_check, measure_recall, make_fixture_repo) restent
+# dans le repo flotte pour ne pas polluer ni faire crasher le repo produit.
+for s in consolidate_findings.py generate_asvs_matrix.py preflight_tooling.py; do
+  install_file "$SRC/scripts/$s" "scripts/$s"
+done
 for f in "$SRC"/templates/*;    do [ -f "$f" ] && install_file "$f" "templates/$(basename "$f")"; done
 for f in "$SRC"/reference/*;    do [ -f "$f" ] && install_file "$f" "reference/$(basename "$f")"; done
+install_file "$SRC/PLAYBOOK.md" "PLAYBOOK.md"
 
 sort -u "$TMP_MANIFEST" > "$MANIFEST"
 

@@ -28,8 +28,8 @@ git add -A
 git commit -q -m "app: initial vulnerable app"
 
 # Secret uniquement dans l'historique : plante puis retire.
-# FIXTURE: faux token, ne jamais utiliser.
-printf 'FIXTURE_SERVICE_TOKEN=sk-ant-FIXTURE1111111111111111111111111111111111111111\n' > leaked_token.txt
+# FIXTURE: faux token, ne jamais utiliser (marqueur FIXTURE en token borne).
+printf 'FIXTURE_SERVICE_TOKEN=sk-ant-FIXTURE-1111111111111111111111111111111111111111\n' > leaked_token.txt
 git add leaked_token.txt
 git commit -q -m "chore: temporary token (will be removed)"
 git rm -q leaked_token.txt

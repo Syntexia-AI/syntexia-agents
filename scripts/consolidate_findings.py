@@ -14,6 +14,7 @@ No third-party dependency: the schema check is a pure-Python structural pass.
 import argparse
 import json
 import pathlib
+import re
 import sys
 
 SEV_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
@@ -21,6 +22,9 @@ SEV_LIST = ["P0", "P1", "P2", "P3"]
 VALID_CATEGORIES = {"secret", "dependency", "sast", "authz", "api", "llm",
                     "resilience", "infra", "injection"}
 VALID_STATUS = {"OPEN", "FIXED", "NEEDS-HUMAN"}
+ALLOWED_TAGS = {"scope-touches-exposed-route", "unauth-inbound-channel",
+                "reaches-tool-side-effects", "missing-tenant-filter",
+                "reachable-from-surface", "history-only", "dummy-suspected"}
 
 
 def escalate(sev, steps=1):
@@ -28,30 +32,56 @@ def escalate(sev, steps=1):
 
 
 def structural_check(doc, source):
-    """Minimal structural validation. Returns list of error strings."""
+    """Structural + type validation. Returns list of error strings. Never raises."""
     errs = []
     if not isinstance(doc, dict):
         return [f"{source}: racine non-objet"]
     for key in ("agent", "findings", "scans", "clean_checks"):
         if key not in doc:
             errs.append(f"{source}: champ '{key}' absent")
-    for i, f in enumerate(doc.get("findings", []) or []):
+    findings = doc.get("findings")
+    if findings is not None and not isinstance(findings, list):
+        errs.append(f"{source}: 'findings' n'est pas une liste")
+        findings = []
+    for i, f in enumerate(findings or []):
         loc = f"{source}#finding[{i}]"
+        if not isinstance(f, dict):
+            errs.append(f"{loc}: finding non-objet")
+            continue
         for key in ("id", "title", "category", "severity", "confidence",
                     "file", "evidence", "impact", "fix_hint", "verified", "status"):
             if key not in f:
                 errs.append(f"{loc}: champ '{key}' absent")
+        if not isinstance(f.get("id"), str) or not f.get("id"):
+            errs.append(f"{loc}: id absent ou non-textuel")
         if f.get("severity") not in SEV_ORDER:
             errs.append(f"{loc}: severity invalide ({f.get('severity')})")
         if f.get("category") not in VALID_CATEGORIES:
             errs.append(f"{loc}: category invalide ({f.get('category')})")
         if f.get("status") not in VALID_STATUS:
             errs.append(f"{loc}: status invalide ({f.get('status')})")
+        line = f.get("line")
+        if line is not None and not isinstance(line, int):
+            errs.append(f"{loc}: line ni entier ni null ({line!r})")
+        tags = f.get("correlation_tags")
+        if tags is not None:
+            if not isinstance(tags, list):
+                errs.append(f"{loc}: correlation_tags n'est pas une liste")
+            else:
+                for t in tags:
+                    if t not in ALLOWED_TAGS:
+                        errs.append(f"{loc}: correlation_tag inconnu ({t!r})")
     return errs
 
 
 def dedup_key(f):
-    return (f.get("category"), f.get("file"), f.get("line"))
+    line = f.get("line")
+    if line is None:
+        # File-level finding: distinguish distinct flaws by normalized title so two
+        # different findings in the same file+category do not silently merge.
+        norm = re.sub(r"[^a-z0-9]+", "", (f.get("title") or "").lower())
+        return (f.get("category"), f.get("file"), "title:" + norm)
+    return (f.get("category"), f.get("file"), line)
 
 
 def apply_correlation_rules(findings):
@@ -67,19 +97,21 @@ def apply_correlation_rules(findings):
     for f in findings:
         tags = set(f.get("correlation_tags") or [])
         before = f["severity"]
-        rule = None
+        # Each applicable rule proposes a severity; the STRONGEST wins (rules do not
+        # shadow each other in an if/elif chain).
+        candidates = [(SEV_ORDER[before], None)]
         if f["category"] == "secret" and "scope-touches-exposed-route" in tags:
-            f["severity"] = escalate(f["severity"], 1)
-            rule = "R1 secret+route"
-        elif "unauth-inbound-channel" in tags and "reaches-tool-side-effects" in tags:
-            f["severity"] = "P0"
-            rule = "R2 unauth-channel+tool-side-effects"
-        elif (f["category"] == "authz" and "missing-tenant-filter" in tags
-              and "reachable-from-surface" in tags):
-            f["severity"] = escalate(f["severity"], 1)
-            rule = "R3 tenant-filter+reachable"
-        if rule and f["severity"] != before:
-            escalations.append({"id": f["id"], "rule": rule,
+            candidates.append((SEV_ORDER[escalate(before, 1)], "R1 secret+route"))
+        if "unauth-inbound-channel" in tags and "reaches-tool-side-effects" in tags:
+            candidates.append((SEV_ORDER["P0"], "R2 unauth-channel+tool-side-effects"))
+        if (f["category"] == "authz" and "missing-tenant-filter" in tags
+                and "reachable-from-surface" in tags):
+            candidates.append((SEV_ORDER[escalate(before, 1)], "R3 tenant-filter+reachable"))
+        best_idx = min(idx for idx, _ in candidates)
+        if best_idx < SEV_ORDER[before]:
+            f["severity"] = SEV_LIST[best_idx]
+            winners = [r for idx, r in candidates if r and idx == best_idx]
+            escalations.append({"id": f["id"], "rule": "+".join(winners),
                                 "from": before, "to": f["severity"]})
     return escalations
 
@@ -95,7 +127,7 @@ def consolidate(docs):
         errors.extend(errs)
         if errs:
             continue
-        for f in doc["findings"]:
+        for f in (doc.get("findings") or []):
             g = dict(f)
             g["source_agents"] = [doc["agent"]]
             all_findings.append(g)
@@ -122,18 +154,20 @@ def consolidate(docs):
     findings = list(merged.values())
 
     escalations = apply_correlation_rules(findings)
-    findings.sort(key=lambda f: (SEV_ORDER[f["severity"]], f.get("file") or "", f.get("id")))
+    findings.sort(key=lambda f: (SEV_ORDER[f["severity"]], f.get("file") or "", f.get("id") or ""))
 
     counts = {s: sum(1 for f in findings if f["severity"] == s) for s in SEV_LIST}
     status_counts = {}
     for f in findings:
         status_counts[f["status"]] = status_counts.get(f["status"], 0) + 1
+    contributing = sorted({a for f in findings for a in f.get("source_agents", [])})
 
     return {
         "findings": findings,
         "counts": counts,
         "status_counts": status_counts,
         "escalations": escalations,
+        "contributing_agents": contributing,
         "scans": scans,
         "clean_checks": clean_checks,
     }, errors
@@ -200,6 +234,53 @@ def self_test():
         [finding("API-003", "api", "P0", ["unauth-inbound-channel", "reaches-tool-side-effects"])]))])
     if r["findings"][0]["severity"] != "P0":
         failures.append("clamp P0 casse")
+
+    # Strongest rule wins: secret P3 carrying R1 tag AND both R2 tags -> P0 (not P2)
+    r, e = consolidate([("s", doc("secrets-hunter", [finding(
+        "SECRETS-002", "secret", "P3",
+        ["scope-touches-exposed-route", "unauth-inbound-channel", "reaches-tool-side-effects"])]))])
+    if r["findings"][0]["severity"] != "P0":
+        failures.append(f"strongest-rule attendu P0, obtenu {r['findings'][0]['severity']}")
+
+    # Null-line distinct findings in same file+category do NOT merge
+    r, e = consolidate([("a", doc("secrets-hunter", [
+        finding("SEC-010", "secret", "P1", file="config.py", line=None),
+        {"id": "SEC-011", "title": "different secret", "category": "secret", "severity": "P1",
+         "confidence": "high", "file": "config.py", "line": None, "evidence": "e2",
+         "impact": "i", "fix_hint": "f", "verified": False, "status": "OPEN"},
+    ]))])
+    if len(r["findings"]) != 2:
+        failures.append(f"null-line dedup: attendu 2 findings distincts, obtenu {len(r['findings'])}")
+
+    # Null-line identical-title findings DO merge (same flaw, two agents)
+    def titled(id, title, sev, agent):
+        return doc(agent, [{"id": id, "title": title, "category": "secret", "severity": sev,
+                            "confidence": "high", "file": "c.py", "line": None, "evidence": "e",
+                            "impact": "i", "fix_hint": "f", "verified": False, "status": "OPEN"}])
+    r, e = consolidate([
+        ("a", titled("SEC-020", "hardcoded token", "P1", "secrets-hunter")),
+        ("b", titled("SEC-021", "hardcoded token", "P2", "sast-triager")),
+    ])
+    if len(r["findings"]) != 1:
+        failures.append(f"null-line same-title: attendu 1 fusionne, obtenu {len(r['findings'])}")
+    elif set(r["findings"][0]["source_agents"]) != {"secrets-hunter", "sast-triager"}:
+        failures.append("null-line same-title: sources non fusionnees")
+
+    # Malformed inputs never crash: non-dict finding, null id, null findings, unknown tag
+    for label, bad in [
+        ("non-dict finding", {"agent": "x", "findings": [42], "scans": [], "clean_checks": []}),
+        ("null id", {"agent": "x", "findings": [{"id": None, "title": "t", "category": "sast",
+                     "severity": "P1", "confidence": "high", "file": "a", "evidence": "e",
+                     "impact": "i", "fix_hint": "f", "verified": False, "status": "OPEN"}],
+                     "scans": [], "clean_checks": []}),
+        ("null findings", {"agent": "x", "findings": None, "scans": [], "clean_checks": []}),
+        ("unknown tag", {"agent": "x", "findings": [dict(finding("Z-1", "sast", "P1"),
+                        correlation_tags=["bogus-tag"])], "scans": [], "clean_checks": []}),
+    ]:
+        try:
+            r, e = consolidate([(label, bad)])
+        except Exception as ex:
+            failures.append(f"crash sur '{label}': {ex}")
 
     # Dedup across two agents, same file:line:category, merges sources, keeps worst severity
     r, e = consolidate([

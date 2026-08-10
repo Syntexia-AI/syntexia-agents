@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://syntexia.internal/findings.schema.json",
   "title": "Syntexia security sweep : agent output",
-  "description": "Every fleet agent ends its run by emitting one object of this shape to /tmp/sweep/<agent>.json. Consolidation is scripted, not read from prose.",
+  "description": "Each finding-producing agent (the 9 read-only agents) returns one object of this shape as its final message; the orchestrator persists it to /tmp/sweep/agents/<agent>.json. The 3 producer agents (test-builder, fix-implementer, report-compiler) use prose contracts instead. Consolidation is scripted, not read from prose.",
   "type": "object",
   "required": ["agent", "findings", "scans", "clean_checks"],
   "additionalProperties": false,
@@ -60,7 +60,7 @@
         "status": { "type": "string", "enum": ["OPEN", "FIXED", "NEEDS-HUMAN"] },
         "correlation_tags": {
           "type": "array",
-          "description": "Controlled vocabulary consumed by consolidate_findings.py escalation rules.",
+          "description": "Controlled vocabulary. Five tags drive consolidate_findings.py escalation rules (scope-touches-exposed-route, unauth-inbound-channel, reaches-tool-side-effects, missing-tenant-filter, reachable-from-surface); history-only and dummy-suspected are informational and read by no rule.",
           "items": {
             "type": "string",
             "enum": [

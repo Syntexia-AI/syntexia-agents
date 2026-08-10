@@ -23,6 +23,7 @@ import pathlib
 import sys
 
 LEVELS = {"L1": {"1"}, "L2": {"1", "2"}, "L3": {"1", "2", "3"}}
+VALID_VERDICTS = {"conforme", "non conforme", "non applicable", "non verifie"}
 ATTRIBUTION = ("# ASVS 5.0.0 requirements (c) OWASP Foundation, CC BY-SA 4.0. "
                "Source: https://github.com/OWASP/ASVS release v5.0.0_release. "
                "See .claude/reference/SOURCES.md. Verdicts added by Syntexia fleet.")
@@ -37,31 +38,37 @@ def find_requirements_csv(reference_dir):
 
 
 def load_requirements(csv_path, levels):
-    rows = []
+    rows, all_ids = [], set()
     with open(csv_path, encoding="utf-8") as f:
         for row in csv.DictReader(f):
+            rid = (row.get("req_id") or "").strip()
+            all_ids.add(rid.upper())
             lvl = (row.get("L") or "").strip()
             if lvl in levels:
                 rows.append({
-                    "req_id": (row.get("req_id") or "").strip(),
+                    "req_id": rid,
                     "chapter": (row.get("chapter_name") or "").strip(),
                     "section": (row.get("section_name") or "").strip(),
                     "description": (row.get("req_description") or "").strip(),
                     "level": lvl,
                 })
-    return rows
+    return rows, all_ids
 
 
 def build_finding_index(consolidated_path):
-    """req_id (upper) -> list of finding ids referencing it."""
+    """req_id (upper) -> list of finding ids referencing it. Second return value is
+    a status string: 'ok', 'absent' or 'malformed' (never raises)."""
     idx = {}
     if not consolidated_path or not pathlib.Path(consolidated_path).exists():
-        return idx, False
-    data = json.loads(pathlib.Path(consolidated_path).read_text(encoding="utf-8"))
-    for f in data.get("findings", []):
+        return idx, "absent"
+    try:
+        data = json.loads(pathlib.Path(consolidated_path).read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return idx, "malformed"
+    for f in data.get("findings", []) or []:
         for ref in f.get("asvs_refs", []) or []:
-            idx.setdefault(ref.strip().upper(), []).append(f.get("id"))
-    return idx, True
+            idx.setdefault(str(ref).strip().upper(), []).append(f.get("id"))
+    return idx, "ok"
 
 
 def load_evidence_map(path):
@@ -98,9 +105,26 @@ def main():
         return 1
 
     levels = LEVELS[args.level]
-    reqs = load_requirements(csv_path, levels)
-    finding_index, had_consolidated = build_finding_index(args.consolidated)
+    reqs, all_req_ids = load_requirements(csv_path, levels)
+    in_scope_ids = {r["req_id"].upper() for r in reqs}
+    finding_index, cons_status = build_finding_index(args.consolidated)
     evidence_map = load_evidence_map(args.evidence_map)
+    warnings = []
+
+    # Dangling asvs_refs: a finding points at a requirement that is not in scope.
+    for ref in finding_index:
+        if ref not in in_scope_ids:
+            if ref in all_req_ids:
+                warnings.append(f"asvs_ref {ref} existe mais hors du niveau {args.level} (non porte a la matrice)")
+            else:
+                warnings.append(f"asvs_ref {ref} ne correspond a aucune exigence ASVS (typo probable): findings {finding_index[ref]}")
+
+    # Evidence-map verdicts must use the controlled vocabulary.
+    for rid, entry in list(evidence_map.items()):
+        v = (entry or {}).get("verdict")
+        if v not in VALID_VERDICTS:
+            warnings.append(f"evidence-map {rid}: verdict invalide {v!r}, ignore (defaut non verifie)")
+            evidence_map.pop(rid, None)
 
     counts = {"conforme": 0, "non conforme": 0, "non applicable": 0, "non verifie": 0}
     with open(out, "w", encoding="utf-8", newline="") as f:
@@ -126,8 +150,12 @@ def main():
           f"(niveaux cumulatifs {sorted(levels)}).")
     print(f"  verdicts: conforme={counts['conforme']} non_conforme={counts['non conforme']} "
           f"non_applicable={counts['non applicable']} non_verifie={counts['non verifie']}")
-    if not had_consolidated:
+    if cons_status == "absent":
         print("  ATTENTION: consolidated.json absent, aucun finding mappe : tous non_verifie hors evidence-map.")
+    elif cons_status == "malformed":
+        print("  ATTENTION: consolidated.json illisible (JSON invalide) : aucun finding mappe, matrice degradee.")
+    for w in warnings:
+        print("  !", w)
     return 0
 
 
