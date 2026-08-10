@@ -2,6 +2,14 @@
 
 Format : entrées datées, plus récent en haut. Toute évolution d'agent ou de politique passe par une PR et une entrée ici.
 
+## 2026-08-10 : v0.3.1 : corrections post re-vérification
+
+Seconde passe adversariale (2 vérificateurs) confirmant les deux P0 résolus sans régression de sur-blocage. Résidus corrigés :
+- `consolidate_findings.py` : fichier agent au contenu JSON scalaire (`null`, `42`) faisait planter `main()` avant `structural_check` (garde `isinstance`). `findings: null` désormais signalé comme erreur d'entrée au lieu d'être lu comme « rien trouvé ».
+- `generate_asvs_matrix.py` : consolidated valide mais non-objet (liste/scalaire) et evidence-map malformée ou non-objet dégradent proprement au lieu de tracebacker.
+- `block_push.py` : options globales git en deux mots `--config-env` / `--super-prefix` ajoutées au jeu à valeur (sinon `git --config-env x push` passait).
+- Résidu de refactor « after writing the file » retiré des 7 contrats d'agents.
+
 ## 2026-08-10 : v0.3 : corrections post-revue adversariale v0.2
 
 Passe adversariale (3 vérificateurs Opus) sur les lots v0.2 : 2 P0, plusieurs P1, corrigés avant tout push.

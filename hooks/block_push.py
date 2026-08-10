@@ -15,7 +15,8 @@ import sys
 # the real command. Consuming wrappers (timeout, nice, ...) may take flags/numbers.
 WRAPPERS = {"env", "command", "nohup", "time", "exec", "sudo", "xargs",
             "timeout", "nice", "stdbuf", "ionice"}
-GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--exec-path", "--namespace"}
+GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--exec-path",
+                       "--namespace", "--config-env", "--super-prefix"}
 ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 BLOCK_MSG = ("Bloque par la flotte syntexia-agents : push, merge, pull, reecriture ou "

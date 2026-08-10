@@ -65,19 +65,37 @@ def build_finding_index(consolidated_path):
         data = json.loads(pathlib.Path(consolidated_path).read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return idx, "malformed"
+    if not isinstance(data, dict):
+        return idx, "malformed"
     for f in data.get("findings", []) or []:
+        if not isinstance(f, dict):
+            continue
         for ref in f.get("asvs_refs", []) or []:
             idx.setdefault(str(ref).strip().upper(), []).append(f.get("id"))
     return idx, "ok"
 
 
 def load_evidence_map(path):
+    """Return (map, warnings). Never raises: a malformed or mis-shaped file degrades
+    to an empty map plus a warning rather than a traceback."""
     if not path:
-        return {}
+        return {}, []
     p = pathlib.Path(path)
     if not p.exists():
-        return {}
-    return json.loads(p.read_text(encoding="utf-8"))
+        return {}, [f"evidence-map introuvable: {path} (ignore)"]
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        return {}, [f"evidence-map illisible ({e}), ignore"]
+    if not isinstance(data, dict):
+        return {}, ["evidence-map n'est pas un objet, ignore"]
+    clean, warns = {}, []
+    for rid, entry in data.items():
+        if not isinstance(entry, dict):
+            warns.append(f"evidence-map {rid}: entree non-objet, ignoree")
+            continue
+        clean[rid] = entry
+    return clean, warns
 
 
 def main():
@@ -108,8 +126,7 @@ def main():
     reqs, all_req_ids = load_requirements(csv_path, levels)
     in_scope_ids = {r["req_id"].upper() for r in reqs}
     finding_index, cons_status = build_finding_index(args.consolidated)
-    evidence_map = load_evidence_map(args.evidence_map)
-    warnings = []
+    evidence_map, warnings = load_evidence_map(args.evidence_map)
 
     # Dangling asvs_refs: a finding points at a requirement that is not in scope.
     for ref in finding_index:

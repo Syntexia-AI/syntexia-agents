@@ -40,8 +40,10 @@ def structural_check(doc, source):
         if key not in doc:
             errs.append(f"{source}: champ '{key}' absent")
     findings = doc.get("findings")
-    if findings is not None and not isinstance(findings, list):
-        errs.append(f"{source}: 'findings' n'est pas une liste")
+    if "findings" in doc and not isinstance(findings, list):
+        # null or wrong type: a broken/serialization-failed agent must not read as
+        # "clean, nothing found".
+        errs.append(f"{source}: 'findings' n'est pas une liste ({type(findings).__name__})")
         findings = []
     for i, f in enumerate(findings or []):
         loc = f"{source}#finding[{i}]"
@@ -266,7 +268,7 @@ def self_test():
     elif set(r["findings"][0]["source_agents"]) != {"secrets-hunter", "sast-triager"}:
         failures.append("null-line same-title: sources non fusionnees")
 
-    # Malformed inputs never crash: non-dict finding, null id, null findings, unknown tag
+    # Malformed inputs never crash AND surface an error (never read as clean).
     for label, bad in [
         ("non-dict finding", {"agent": "x", "findings": [42], "scans": [], "clean_checks": []}),
         ("null id", {"agent": "x", "findings": [{"id": None, "title": "t", "category": "sast",
@@ -276,11 +278,16 @@ def self_test():
         ("null findings", {"agent": "x", "findings": None, "scans": [], "clean_checks": []}),
         ("unknown tag", {"agent": "x", "findings": [dict(finding("Z-1", "sast", "P1"),
                         correlation_tags=["bogus-tag"])], "scans": [], "clean_checks": []}),
+        ("scalar root", None),
+        ("scalar int root", 42),
     ]:
         try:
             r, e = consolidate([(label, bad)])
         except Exception as ex:
             failures.append(f"crash sur '{label}': {ex}")
+            continue
+        if not e:
+            failures.append(f"'{label}' aurait du produire une erreur d'entree")
 
     # Dedup across two agents, same file:line:category, merges sources, keeps worst severity
     r, e = consolidate([
@@ -332,9 +339,11 @@ def main():
         ap.error("--in requis hors self-test")
 
     docs = load_dir(args.indir)
+    # isinstance guard: a scalar-root JSON file (null / 42 / "x") parses fine, so the
+    # '__parse_error__' membership test must never run on a non-dict.
     parse_errors = [f"{n}: JSON illisible ({d['__parse_error__']})"
-                    for n, d in docs if "__parse_error__" in d]
-    docs = [(n, d) for n, d in docs if "__parse_error__" not in d]
+                    for n, d in docs if isinstance(d, dict) and "__parse_error__" in d]
+    docs = [(n, d) for n, d in docs if not (isinstance(d, dict) and "__parse_error__" in d)]
     result, errors = consolidate(docs)
     errors = parse_errors + errors
     result["input_errors"] = errors
