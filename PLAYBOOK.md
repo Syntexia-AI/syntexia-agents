@@ -7,7 +7,7 @@ Mis à jour le 2026-08-10 (v0.2). Toute évolution de ce document ou d'un agent 
 Flotte d'agents Claude Code pour la passe sécurité et robustesse pré-livraison des produits Syntexia.
 
 Ce que la flotte garantit :
-- l'élimination systématique de classes de failles connues : secrets exposés, dépendances vulnérables, défauts d'isolation multi-tenant, webhooks non authentifiés, risques spécifiques LLM, défauts de robustesse, configuration d'infrastructure ;
+- le passage au crible systématique de classes de failles connues (secrets exposés, dépendances vulnérables, défauts d'isolation multi-tenant, webhooks non authentifiés, risques spécifiques LLM, défauts de robustesse, configuration d'infrastructure) : chaque classe est recherchée, puis corrigée quand elle est trouvée ou explicitement documentée, jamais silencieusement ignorée ;
 - des preuves pour tout ce qui a été vérifié : chaque affirmation pointe vers un fichier, une ligne, une sortie de scan ;
 - la documentation explicite de tout le reste, marqué NON VERIFIE.
 
