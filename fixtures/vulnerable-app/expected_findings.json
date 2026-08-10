@@ -1,0 +1,21 @@
+{
+  "description": "Failles delibirees plantees dans vulnerable-app. Chaque entree est un attendu que la flotte doit retrouver. match_tokens sont des identifiants de code (independants de la langue du rapport) dont au moins un doit apparaitre dans le finding. Le rappel se mesure avec scripts/measure_recall.py.",
+  "expected": [
+    {"key": "hardcoded-anthropic-key", "category": "secret", "file": "config.py", "min_severity": "P1", "match_tokens": ["sk-ant", "ANTHROPIC_API_KEY"], "hint": "cle anthropic en dur"},
+    {"key": "hardcoded-aws-key", "category": "secret", "file": "config.py", "min_severity": "P1", "match_tokens": ["AKIA", "AWS_ACCESS_KEY"], "hint": "cle AWS d'exemple"},
+    {"key": "db-url-inline-creds", "category": "secret", "file": "config.py", "min_severity": "P2", "match_tokens": ["admin:changeme", "DATABASE_URL", "postgresql://"], "hint": "identifiants en clair dans l'URL"},
+    {"key": "history-only-secret", "category": "secret", "file": "leaked_token.txt", "min_severity": "P1", "match_tokens": ["leaked_token", "FIXTURE_SERVICE_TOKEN", "history"], "hint": "secret retire du working tree mais present dans l'historique git"},
+    {"key": "sql-injection", "category": "sast", "file": "db.py", "min_severity": "P1", "match_tokens": ["find_user", "SELECT * FROM users", "sql"], "hint": "concatenation de chaine dans execute"},
+    {"key": "subprocess-shell-true", "category": "sast", "file": "app.py", "min_severity": "P1", "match_tokens": ["shell=True", "subprocess"], "hint": "subprocess shell=True sur entree utilisateur"},
+    {"key": "idor-note", "category": "authz", "file": "app.py", "min_severity": "P1", "match_tokens": ["read_note", "note_id", "idor"], "hint": "read_note sans controle d'appartenance"},
+    {"key": "missing-tenant-filter", "category": "authz", "file": "db.py", "min_severity": "P1", "match_tokens": ["notes_for_tenant", "tenant"], "hint": "notes_for_tenant sans discriminant tenant"},
+    {"key": "webhook-no-signature", "category": "api", "file": "app.py", "min_severity": "P0", "match_tokens": ["telephony_webhook", "signature", "webhook"], "hint": "telephony_webhook sans verification de signature declenchant une action"},
+    {"key": "ssrf-fetch", "category": "api", "file": "app.py", "min_severity": "P1", "match_tokens": ["ssrf", "/fetch", "requests.get(url"], "hint": "fetch d'URL utilisateur sans allowlist"},
+    {"key": "prompt-injection-tools", "category": "llm", "file": "bot.py", "min_severity": "P0", "match_tokens": ["transcribed_speech", "injection", "handle_call"], "hint": "texte transcrit vers modele avec outils a effets externes"},
+    {"key": "unbounded-tool-loop", "category": "llm", "file": "bot.py", "min_severity": "P1", "match_tokens": ["while True", "max_tokens", "loop", "boucle"], "hint": "boucle while True sans borne de tours ni cout"},
+    {"key": "no-timeout-outbound", "category": "resilience", "file": "app.py", "min_severity": "P2", "match_tokens": ["timeout", "requests.post"], "hint": "requests.post sans timeout"},
+    {"key": "vuln-dependencies", "category": "dependency", "file": "requirements.txt", "min_severity": "P1", "match_tokens": ["requests", "urllib3", "jinja2", "pyyaml", "fastapi", "cve"], "hint": "dependances anciennes a CVE"},
+    {"key": "docker-root-unpinned", "category": "infra", "file": "Dockerfile", "min_severity": "P2", "match_tokens": ["python:3.11", "root", "USER", "build arg", "digest"], "hint": "base non epinglee, conteneur root, secret en build arg"},
+    {"key": "ci-action-tag-pinned", "category": "infra", "file": "ci.yml", "min_severity": "P2", "match_tokens": ["changed-files", "@v44", "@v4", "sha", "permissions"], "hint": "action epinglee par tag mutable, pas de permissions"}
+  ]
+}

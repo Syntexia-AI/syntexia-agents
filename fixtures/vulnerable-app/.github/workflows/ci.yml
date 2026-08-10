@@ -1,0 +1,11 @@
+# Faille infra: action tierce epinglee par tag mutable (pas par SHA), pas de
+# bloc permissions explicite. Temoin ; ce workflow ne s'execute pas (hors racine).
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tj-actions/changed-files@v44
+      - run: echo build
