@@ -1,21 +1,46 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: blocks autonomous git push/merge, gh pr create|merge,
-gh repo create, gh api merge endpoints. Fails CLOSED on any anomaly."""
+"""PreToolUse hook: defense-in-depth guard against autonomous state-changing and
+destructive git/gh commands. Fails CLOSED on any anomaly.
+
+This is NOT the primary barrier. The primary barrier is permissions.deny in
+.claude/settings.json, enforced by the harness. This hook parses a command line
+and cannot see a push hidden in a shell script, an xargs-fed git call, or a
+shell alias. See PLAYBOOK.md section 8."""
 import json
 import re
 import shlex
 import sys
 
-WRAPPERS = {"env", "command", "nohup", "time", "exec"}
+WRAPPERS = {"env", "command", "nohup", "time", "exec", "sudo", "xargs"}
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--exec-path", "--namespace"}
-BLOCK_MSG = ("Bloque par la flotte syntexia-agents : push, merge et creation de PR/repo "
-             "sont des actions humaines. Laisse la branche locale en l'etat et rends la main.")
+# git subcommand -> predicate over the remaining lowercased tokens; True == block.
+BLOCKED_GIT = {
+    "push": lambda a: True,
+    "merge": lambda a: True,
+    "reset": lambda a: "--hard" in a,
+    "rebase": lambda a: True,
+    "clean": lambda a: any(t.startswith("-") and "f" in t for t in a),
+    "update-ref": lambda a: "-d" in a,
+    "checkout": lambda a: any(t in ("-f", "--force") for t in a),
+    "switch": lambda a: any(t in ("-f", "--force", "--discard-changes") for t in a),
+    "branch": lambda a: any(t in ("-D",) for t in a)
+    or ("--delete" in a and any(t in ("-f", "--force") for t in a)),
+    "remote": lambda a: bool(a) and a[0].lower() in {"set-url", "remove", "rm", "rename"},
+    "filter-branch": lambda a: True,
+    "filter-repo": lambda a: True,
+}
+BLOCK_MSG = ("Bloque par la flotte syntexia-agents : push, merge, reecriture ou destruction "
+             "d'historique et creation de PR/repo sont des actions humaines. Laisse la branche "
+             "locale en l'etat et rends la main.")
 
 def deny(msg=BLOCK_MSG):
     sys.stderr.write(msg)
     return 2
 
 def git_subcommand(tokens):
+    """Return (subcommand_lowercased, args_in_original_case) skipping git's own
+    global options. Args keep their case because git flags are case-sensitive:
+    -D (force delete) must not collapse onto -d (delete merged)."""
     i = 0
     while i < len(tokens):
         t = tokens[i]
@@ -25,8 +50,8 @@ def git_subcommand(tokens):
         if t.startswith("-"):
             i += 1
             continue
-        return t.lower()
-    return ""
+        return t.lower(), tokens[i + 1:]
+    return "", []
 
 def segment_blocked(seg):
     try:
@@ -38,13 +63,15 @@ def segment_blocked(seg):
     if not tokens:
         return False
     head = tokens[0].lower().rsplit("/", 1)[-1]
-    rest = [t.lower() for t in tokens[1:]]
     if head == "git":
-        return git_subcommand(rest) in {"push", "merge"}
+        sub, args = git_subcommand(tokens[1:])
+        predicate = BLOCKED_GIT.get(sub)
+        return bool(predicate and predicate(args))
+    rest = [t.lower() for t in tokens[1:]]
     if head == "gh":
         if len(rest) >= 2 and rest[0] == "pr" and rest[1] in {"create", "merge"}:
             return True
-        if len(rest) >= 2 and rest[0] == "repo" and rest[1] == "create":
+        if len(rest) >= 2 and rest[0] == "repo" and rest[1] in {"create", "delete"}:
             return True
         if rest and rest[0] == "api" and any("/merges" in t or re.search(r"/pulls/\d+/merge$", t) for t in rest):
             return True
@@ -63,8 +90,9 @@ def main() -> int:
     if not isinstance(command, str):
         return deny("Hook block_push : commande absente ou non textuelle, blocage par defaut.")
     if re.search(r"`|\$\(|\b(ba)?sh\s+-c\b", command) and \
-       re.search(r"\b(push|merge)\b|/merges|pr\s+(create|merge)|repo\s+create", command, re.I):
-        return deny("Hook block_push : construction shell imbriquee avec mot-cle push/merge, "
+       re.search(r"\b(push|merge|reset|rebase|clean|filter-branch|filter-repo|set-url)\b"
+                 r"|/merges|pr\s+(create|merge)|repo\s+(create|delete)", command, re.I):
+        return deny("Hook block_push : construction shell imbriquee avec mot-cle sensible, "
                     "blocage par defaut. Reformule sans sous-shell.")
     for seg in re.split(r"(?:&&|\|\||;|\||\n)", command):
         if seg.strip() and segment_blocked(seg):

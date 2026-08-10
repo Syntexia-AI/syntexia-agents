@@ -1,4 +1,30 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git merge:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git rebase:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git clean -d:*)",
+      "Bash(git clean -x:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git checkout -f:*)",
+      "Bash(git checkout --force:*)",
+      "Bash(git switch -f:*)",
+      "Bash(git switch --force:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git remote remove:*)",
+      "Bash(git remote rename:*)",
+      "Bash(git update-ref -d:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh repo delete:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
