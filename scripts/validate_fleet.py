@@ -61,6 +61,17 @@ for cmd, should_block in [
     ("git -C /x push", True),
     ("echo $(git push)", True),
     ("gh api repos/o/r/merges -f base=main", True),
+    ("git reset --hard HEAD~3", True),
+    ("git reset --soft HEAD~1", False),
+    ("git rebase main", True),
+    ("git clean -fd", True),
+    ("git clean -n", False),
+    ("git branch -D main", True),
+    ("git branch -d merged", False),
+    ("git remote set-url origin https://x", True),
+    ("git remote -v", False),
+    ("gh repo delete x", True),
+    ("git commit -m \"reset the counter\"", False),
 ]:
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
     proc = subprocess.run(
@@ -80,9 +91,45 @@ for label, raw in [
     if proc.returncode != 2:
         errors.append(f"hook: anomalie '{label}' non bloquee (rc={proc.returncode})")
 
+# settings.template.json : barriere primaire permissions.deny presente et coherente.
+settings = ROOT / "hooks" / "settings.template.json"
+try:
+    sdata = json.loads(settings.read_text(encoding="utf-8"))
+    deny = sdata.get("permissions", {}).get("deny", [])
+    required_deny = ["git push", "git merge", "git reset --hard", "gh pr create", "gh repo create"]
+    for r in required_deny:
+        if not any(r in d for d in deny):
+            errors.append(f"settings.template.json: permissions.deny ne couvre pas '{r}'")
+    if not sdata.get("hooks", {}).get("PreToolUse"):
+        errors.append("settings.template.json: hook PreToolUse absent")
+except Exception as e:
+    errors.append(f"settings.template.json illisible: {e}")
+
+# install.sh doit deployer les scripts (l'orchestrateur appelle .claude/scripts/*.py).
+install_sh = (ROOT / "install.sh").read_text(encoding="utf-8")
+if "/scripts/" not in install_sh or "scripts/" not in install_sh:
+    errors.append("install.sh ne copie pas scripts/ vers la cible")
+if "FLEET_VERSION" not in install_sh:
+    errors.append("install.sh n'ecrit pas FLEET_VERSION")
+
+# Scripts attendus presents.
+for script in ["consolidate_findings.py", "generate_asvs_matrix.py",
+               "preflight_tooling.py", "measure_recall.py"]:
+    if not (ROOT / "scripts" / script).exists():
+        errors.append(f"scripts/{script} manquant")
+
+# Self-test de la consolidation (regles d'escalade testables).
+proc = subprocess.run(
+    [sys.executable, str(ROOT / "scripts" / "consolidate_findings.py"), "--self-test"],
+    capture_output=True, text=True
+)
+if proc.returncode != 0:
+    errors.append(f"consolidate_findings --self-test echoue: {proc.stdout.strip()} {proc.stderr.strip()}")
+
 if errors:
     print("ECHEC VALIDATION")
     for e in errors:
         print(" -", e)
     sys.exit(1)
-print(f"OK: {len(agent_files)} agents valides, commande presente, hook fonctionnel.")
+print(f"OK: {len(agent_files)} agents valides, commande presente, hook (push+destructifs) fonctionnel, "
+      f"permissions.deny et scripts verifies, consolidation self-test OK.")
