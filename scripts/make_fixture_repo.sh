@@ -20,6 +20,13 @@ mkdir -p "$DEST"
 cp -r "$SRC"/. "$DEST"/
 cd "$DEST"
 
+# Le manifeste est stocke en requirements.txt.fixture dans le repo flotte (pour ne
+# pas declencher Dependabot la-bas) ; le repo temoin materialise a besoin du vrai
+# nom requirements.txt pour que le scanner de dependances le detecte.
+if [ -f requirements.txt.fixture ]; then
+  mv requirements.txt.fixture requirements.txt
+fi
+
 git init -q -b main
 git config user.name "Fixture Bot"
 git config user.email "fixture@example.invalid"

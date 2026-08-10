@@ -1,0 +1,11 @@
+# Ce fichier s'appelle requirements.txt.fixture, PAS requirements.txt, pour que
+# GitHub Dependabot ne leve pas d'alertes sur le repo flotte a cause de ces
+# versions volontairement vulnerables (elles sont le sujet du test, pas un risque).
+# scripts/make_fixture_repo.sh le renomme en requirements.txt dans le repo temoin
+# materialise, ou le scanner de dependances doit justement le trouver.
+# Faille dependency: versions epinglees anciennes avec CVE connues (temoin).
+requests==2.19.1
+urllib3==1.24.1
+jinja2==2.10
+pyyaml==5.1
+fastapi==0.65.0

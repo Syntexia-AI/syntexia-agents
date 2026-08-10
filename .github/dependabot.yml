@@ -1,0 +1,15 @@
+# Dependabot config. Portee : mises a jour de version par PR, PAS les alertes de
+# securite. Les alertes suivent le graphe de dependances et ne se configurent pas
+# ici ; le repo temoin est neutralise en renommant son manifeste en
+# requirements.txt.fixture (voir fixtures/vulnerable-app/), ce qui le retire du
+# graphe. Ce fichier est la ceinture, le renommage est les bretelles.
+#
+# fixtures/ contient une application volontairement vulnerable : aucun ecosysteme
+# de paquets n'y est declare ci-dessous, elle est donc ignoree par Dependabot.
+# Seules les GitHub Actions de la flotte (epinglees par SHA) sont suivies.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
