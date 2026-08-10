@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/block_push.py"
+            "command": "sh -c 'PY=$(command -v python3 || command -v python) || { echo \"hook block_push : python introuvable, blocage par defaut\" >&2; exit 2; }; exec \"$PY\" .claude/hooks/block_push.py'"
           }
         ]
       }

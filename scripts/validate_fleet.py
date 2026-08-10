@@ -41,14 +41,27 @@ for f in agent_files:
     if name in WRITERS and not tools:
         errors.append(f"{f.name}: writer sans liste d'outils explicite")
 
-missing = (READ_ONLY | WRITERS) - names
-if missing:
-    errors.append(f"agents manquants: {sorted(missing)}")
+if len(agent_files) != 12:
+    errors.append(f"nombre d'agents inattendu: {len(agent_files)} (12 attendus)")
+if names != (READ_ONLY | WRITERS):
+    errors.append(
+        f"ensembles d'agents divergents: manquants={sorted((READ_ONLY | WRITERS) - names)}, "
+        f"inattendus={sorted(names - (READ_ONLY | WRITERS))}"
+    )
 if not (ROOT / "commands" / "security-sweep.md").exists():
     errors.append("commands/security-sweep.md manquant")
 
 hook = ROOT / "hooks" / "block_push.py"
-for cmd, should_block in [("git push origin main", True), ("git status", False), ("gh pr merge 4", True)]:
+for cmd, should_block in [
+    ("git push origin main", True),
+    ("git status", False),
+    ("gh pr merge 4", True),
+    ('git commit -m "fix merge conflict"', False),
+    ("git stash pop", False),
+    ("git -C /x push", True),
+    ("echo $(git push)", True),
+    ("gh api repos/o/r/merges -f base=main", True),
+]:
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
     proc = subprocess.run(
         [sys.executable, str(hook)], input=payload, capture_output=True, text=True
@@ -56,6 +69,16 @@ for cmd, should_block in [("git push origin main", True), ("git status", False),
     blocked = proc.returncode == 2
     if blocked is not should_block:
         errors.append(f"hook: comportement inattendu pour '{cmd}' (rc={proc.returncode})")
+
+for label, raw in [
+    ("stdin non-JSON", "not json"),
+    ("tool_input null", json.dumps({"tool_name": "Bash", "tool_input": None})),
+]:
+    proc = subprocess.run(
+        [sys.executable, str(hook)], input=raw, capture_output=True, text=True
+    )
+    if proc.returncode != 2:
+        errors.append(f"hook: anomalie '{label}' non bloquee (rc={proc.returncode})")
 
 if errors:
     print("ECHEC VALIDATION")

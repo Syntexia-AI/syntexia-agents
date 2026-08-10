@@ -15,7 +15,9 @@ mkdir -p "$TARGET/.claude/agents" "$TARGET/.claude/commands" "$TARGET/.claude/ho
 cp "$SRC"/agents/*.md "$TARGET/.claude/agents/"
 cp "$SRC"/commands/*.md "$TARGET/.claude/commands/"
 cp "$SRC"/hooks/block_push.py "$TARGET/.claude/hooks/"
-cp "$SRC"/templates/RAPPORT-template.md "$TARGET/.claude/hooks/../" 2>/dev/null || true
+mkdir -p "$TARGET/.claude/templates" "$TARGET/.claude/reference"
+cp "$SRC"/templates/*.md "$TARGET/.claude/templates/"
+cp "$SRC"/reference/* "$TARGET/.claude/reference/"
 
 if [ -f "$TARGET/.claude/settings.json" ]; then
   echo "NOTE: $TARGET/.claude/settings.json existe deja."
