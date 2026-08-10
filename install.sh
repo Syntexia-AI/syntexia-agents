@@ -19,6 +19,18 @@ CLAUDE_DIR="$TARGET/.claude"
 MANIFEST="$CLAUDE_DIR/.fleet_manifest"
 mkdir -p "$CLAUDE_DIR"
 
+# 0. Le controle primaire (permissions.deny) ne doit JAMAIS etre optionnel. Si un
+# settings.json existe deja sans la barriere, on echoue bruyamment avant toute copie
+# plutot que de laisser la flotte tourner sans son garde-fou principal.
+if [ -f "$CLAUDE_DIR/settings.json" ] && ! grep -q 'Bash(git push' "$CLAUDE_DIR/settings.json"; then
+  echo "ERREUR: $CLAUDE_DIR/settings.json existe mais ne contient PAS la barriere primaire" >&2
+  echo "        permissions.deny (aucune entree 'Bash(git push...)'). Le controle primaire" >&2
+  echo "        ne doit jamais etre opt-in. Installation interrompue, rien n'a ete copie." >&2
+  echo "        Fusionne le bloc permissions.deny ET le hook PreToolUse depuis" >&2
+  echo "        $SRC/hooks/settings.template.json, puis relance ./install.sh." >&2
+  exit 1
+fi
+
 # 1. Purge des fichiers deposes par une installation precedente.
 if [ -f "$MANIFEST" ]; then
   while IFS= read -r rel; do
@@ -57,11 +69,12 @@ SHA="$(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo unknown)"
 STAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 printf 'fleet_commit: %s\ninstalled_at: %s\nsource: %s\n' "$SHA" "$STAMP" "$SRC" > "$CLAUDE_DIR/FLEET_VERSION"
 
-# 4. settings.json : jamais ecraser une config existante du repo produit.
+# 4. settings.json : jamais ecraser une config existante (elle a passe le precheck 0,
+# donc elle contient deja la barriere permissions.deny).
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
-  echo "NOTE: $CLAUDE_DIR/settings.json existe deja (non ecrase)."
-  echo "      Fusionne manuellement le bloc permissions.deny ET le hook PreToolUse"
-  echo "      depuis $SRC/hooks/settings.template.json (barriere primaire + defense en profondeur)."
+  echo "NOTE: $CLAUDE_DIR/settings.json existe deja et contient la barriere primaire (non ecrase)."
+  echo "      Verifie qu'il inclut aussi le hook PreToolUse block_push et les deny d'egress"
+  echo "      depuis $SRC/hooks/settings.template.json (defense en profondeur)."
 else
   cp "$SRC/hooks/settings.template.json" "$CLAUDE_DIR/settings.json"
   echo "settings.json installe (permissions.deny + hook anti-push)."
