@@ -11,21 +11,31 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Fleet structure, hook, permissions, consolidation self-test
+      - name: Fleet structure, agent rules, settings, installer checks
         run: python scripts/validate_fleet.py
+      - name: Hook attack and benign matrix
+        run: python scripts/test_hook.py
       - name: Hygiene (no em-dash, no real secrets, no client contamination)
+        env:
+          FLEET_HYGIENE_DENYLIST: ${{ secrets.FLEET_HYGIENE_DENYLIST }}
         run: python scripts/hygiene_check.py
-      - name: Consolidation escalation rules self-test
-        run: python scripts/consolidate_findings.py --self-test
+      - name: Script self-tests
+        run: |
+          python scripts/consolidate_findings.py --self-test
+          python scripts/redacted_secret_scan.py --self-test
+          python scripts/fleet_settings.py --self-test
       - name: ASVS matrix generates at L1 and L2
         run: |
           python scripts/generate_asvs_matrix.py --level L2 --reference-dir reference --consolidated /nonexistent.json --out /tmp/asvs-L2.csv
           python scripts/generate_asvs_matrix.py --level L1 --reference-dir reference --consolidated /nonexistent.json --out /tmp/asvs-L1.csv
-      - name: Installer and fixture scripts are syntactically valid
+      - name: Installer and disposable clone integration tests
+        run: bash scripts/test_install.sh
+      - name: Shell scripts (syntax and ShellCheck)
         run: |
-          bash -n install.sh
-          bash -n scripts/make_fixture_repo.sh
+          for f in install.sh scripts/*.sh; do bash -n "$f"; done
+          command -v shellcheck >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+          shellcheck install.sh scripts/*.sh

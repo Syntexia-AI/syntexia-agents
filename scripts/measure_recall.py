@@ -4,9 +4,10 @@
 An expected finding is matched when a consolidated finding shares its category,
 points at the same file (basename), AND contains at least one of the expected
 entry's match_tokens (code identifiers, independent of report language). Matching
-is one-to-one and greedy: each finding is consumed by at most one expected entry,
-so two distinct flaws in the same file+category cannot both be satisfied by a
-single finding (which would inflate recall). Severity below the expected minimum
+is one-to-one (maximum bipartite matching): each finding is consumed by at most
+one expected entry, so two distinct flaws in the same file+category cannot both be
+satisfied by a single finding (which would inflate recall), and a complete sweep is
+never under-counted by an unlucky assignment order. Severity below the expected minimum
 is a warning, not a recall miss: recall answers "did the fleet see it at all".
 
 Exit 1 if recall is below --min-recall (default 0.9) so CI or a human gate can

@@ -12,3 +12,9 @@ DATABASE_URL = "postgresql://admin:changeme@localhost:5432/app"
 
 # Faille: secret de signature webhook vide, donc verification desactivable.
 WEBHOOK_SECRET = ""
+
+# Faille: table d'utilisateurs avec mots de passe en dur (valeurs FIXTURE).
+LOCAL_USERS = {
+    "alice": "FIXTURE-alice-pass",
+    "bob": "FIXTURE-bob-pass",
+}

@@ -6,7 +6,7 @@ l'installe, on lance `/security-sweep full`, on compare les findings consolidés
 
 Tous les identifiants, clés et mots de passe de ce dossier sont FAUX et le
 déclarent : clé AWS d'exemple canonique `AKIAIOSFODNN7EXAMPLE`, préfixe
-`FIXTURE`, mots de passe `changeme`. Rien ici n'est un secret réel. Les greps
+`FIXTURE`, mots de passe `changeme` et `FIXTURE-...` (table `LOCAL_USERS`). Rien ici n'est un secret réel. Les greps
 d'hygiène du repo flotte excluent `fixtures/`.
 
 Ne jamais déployer ce code. Il contient des failles délibérées documentées dans

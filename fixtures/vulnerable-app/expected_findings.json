@@ -16,6 +16,8 @@
     {"key": "no-timeout-outbound", "category": "resilience", "file": "app.py", "min_severity": "P2", "match_tokens": ["timeout", "requests.post"], "hint": "requests.post sans timeout"},
     {"key": "vuln-dependencies", "category": "dependency", "file": "requirements.txt", "min_severity": "P1", "match_tokens": ["requests", "urllib3", "jinja2", "pyyaml", "fastapi", "cve"], "hint": "dependances anciennes a CVE"},
     {"key": "docker-root-unpinned", "category": "infra", "file": "Dockerfile", "min_severity": "P2", "match_tokens": ["python:3.11", "root", "USER", "build arg", "digest"], "hint": "base non epinglee, conteneur root, secret en build arg"},
-    {"key": "ci-action-tag-pinned", "category": "infra", "file": "ci.yml", "min_severity": "P2", "match_tokens": ["changed-files", "@v44", "@v4", "sha", "permissions"], "hint": "action epinglee par tag mutable, pas de permissions"}
+    {"key": "ci-action-tag-pinned", "category": "infra", "file": "ci.yml", "min_severity": "P2", "match_tokens": ["changed-files", "@v44", "@v4", "sha", "permissions"], "hint": "action epinglee par tag mutable, pas de permissions"},
+    {"key": "credential-table", "category": "secret", "file": "config.py", "min_severity": "P1", "match_tokens": ["LOCAL_USERS", "credential-table", "credential table"], "hint": "table d'utilisateurs avec mots de passe en dur"},
+    {"key": "free-transfer-destination", "category": "llm", "file": "bot.py", "min_severity": "P0", "match_tokens": ["transfer_call", "destination", "toll"], "hint": "outil de transfert d'appel dont le numero vient du modele"}
   ]
 }

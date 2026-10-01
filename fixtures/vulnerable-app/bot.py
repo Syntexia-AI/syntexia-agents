@@ -8,6 +8,8 @@ client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 TOOLS = [
     {"name": "cancel_booking", "description": "Annule une reservation"},
     {"name": "send_sms", "description": "Envoie un SMS au client"},
+    # Faille llm: numero de destination choisi par le modele (fraude au transfert).
+    {"name": "transfer_call", "description": "Transfere l'appel vers le numero indique"},
 ]
 
 

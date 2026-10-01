@@ -2,6 +2,44 @@
 
 Format : entrées datées, plus récent en haut. Toute évolution d'agent ou de politique passe par une PR et une entrée ici.
 
+## 2026-10-01 : v0.4.1 : isolation des passes et secrets imbriqués
+
+Relecture de la v0.4 avant son premier usage. Chaque défaut a été reproduit, et chaque nouveau test échoue sur le code v0.4.
+
+Sérieux (P1) :
+- Mélange de passes dans `/tmp/sweep`, zone de travail commune à toutes les passes et jamais vidée. Les fichiers d'agents d'une passe précédente, peut-être d'un autre client, étaient consolidés dans la passe suivante : en mode light (les agents de Phase 3 ne tournent pas, leurs anciens fichiers restent), ou quand un agent ne renvoyait pas de JSON valide (l'ancien fichier du même nom restait). Démontré : un finding SAST d'une passe A remontait dans la consolidation d'une passe B. Correctif : la Phase 0 s'arrête si `/tmp/sweep` n'est pas absent ou vide, puis écrit le marqueur de passe `/tmp/sweep/RUN.json` (repo, commit). `consolidate_findings.py --run-marker` écarte tout fichier d'agent antérieur au marqueur. Si le marqueur manque, est illisible ou désigne un autre repo, il s'arrête sans rien écrire (code 2). Ses messages ne nomment jamais l'autre repo. `prepare_sweep_clone.sh` signale une zone de travail non vide ou en lien symbolique, et le rapport final rappelle de la supprimer.
+
+Durcissements (P2) :
+- `install.sh` : la détection de copie vivante lisait `git status --porcelain --ignored`, qui replie un dossier entièrement non suivi ou ignoré en une seule ligne (`config/`, `secrets/`). Un `config/.env.production` ou un `secrets/server.key` passait donc inaperçu. Démontré. La liste vient désormais de `git ls-files --others`, fichier par fichier. Les dossiers de dépendances installées (`node_modules`, `.venv`, `site-packages`, `vendor`...) sont exclus de cette détection : leurs certificats de test ne sont pas des secrets du checkout. La Phase 0 utilise la même liste.
+- Hook : une racine de zone de travail qui est elle-même un lien symbolique est ignorée. Un lien planté à `/tmp/sweep` vers `/` aurait sinon ouvert tout le disque en écriture au hook. Les écritures y sont refusées.
+- Tests : 465 cas pour la matrice du hook (lien symbolique et commandes de la nouvelle Phase 0), 56 contrôles d'installation (secrets imbriqués, faux positif des dépendances). Le consolidateur a un auto-test du marqueur, et `validate_fleet.py` exige les étapes d'isolation dans `/security-sweep`.
+
+## 2026-10-01 : v0.4 : durcissement après revue adversariale (contournements reproduits)
+
+Revue adversariale de la v0.3.1. Chaque contournement ci-dessous a été reproduit sur le code, pas supposé.
+
+Bloquants (P0) :
+- Hook v3 : 38 commandes dangereuses sur 42 testées passaient. Exemples : `sudo -u <user> git push`, `timeout -s KILL 30 git push`, `env -u X git push`, `git -c alias.p=push p`, `git config remote.origin.url`, `git send-pack`, `git subtree push`, `/usr/lib/git-core/git-push`, `echo push | xargs git`, `echo 'git push' | bash`, `eval`, `echo a#; git push` (le `#` masquait la suite au parseur), `gh api` (création de PR, mise à jour forcée de `main`, écriture de fichier distant), `gh repo edit --visibility public`, `gh secret set`, `aws ssm send-command`, lecture de `.env` vers `/dev/tcp`, `pip install`, `ssh`, `rm -r -f`. Hook v4 réécrit : liste blanche git ; wrappers analysés par arité d'options avec filet de sécurité ; shells imbriqués, heredocs, substitutions, code en ligne des interpréteurs, scripts shell sur disque ; outils réseau, systèmes vivants, élévation de privilèges, installations ; secrets et environnement ; `.claude/` et `.git/` ; écritures confinées au projet et à `/tmp/sweep` ; outils Read, Grep, Edit et Write couverts. Toute erreur interne bloque (Claude Code traite le code 1 comme non bloquant). Puis trois passes de revue adversariale indépendante sur la v4, chaque contournement reproduit avant correction : 10 au premier tour (awk en écriture et en lecture, sed `e` et `w`, perl et ruby `-ne`, fonctions PHP, variables d'environnement git `GIT_EXTERNAL_DIFF` et `GIT_CONFIG_COUNT`, `BASH_ENV`, globs `.en*`, `${!v}`, deno, commandes géantes qui faisaient dépasser le délai du hook), 8 au deuxième (délimiteur sed alphanumérique, `awk -f /dev/stdin`, `PYTHONPATH` et `sitecustomize.py`, `printf -v` et `read`, `node --eval=`, `sort -o`, extraction d'archives, `git apply` qui pouvait réécrire `.claude/`, glob profond qui faisait expirer le hook), 4 au troisième (`ruby -r`, `perl -I`, `openssl -out`, `python -m json.tool`, `go build -o`). Tous corrigés et ajoutés à la matrice : 458 cas en CI (`scripts/test_hook.py`), aucune erreur interne ni dépassement de délai sur 5500 commandes aléatoires, pire cas mesuré 0,3 s.
+- `install.sh` : le manifeste, lu dans le repo cible donc donnée non fiable, permettait de supprimer des fichiers hors du repo (`../../`). Démontré. Entrées désormais validées ; liens symboliques sur le chemin d'installation refusés ; fichiers liens remplacés sans écriture au travers.
+- `install.sh` : le précontrôle `grep -q 'Bash(git push'` acceptait un settings.json qui AUTORISAIT `git push` (motif dans `allow`) ; la flotte tournait alors sans aucune règle deny. Démontré. Contrôle en JSON par `scripts/fleet_settings.py`, fusion optionnelle avec sauvegarde.
+
+Sérieux (P1) :
+- `permissions.deny` : la documentation de Claude Code confirme que `Bash(git push *)` ne couvre pas `git -C . push`. Ajout de règles à joker central et interdiction des outils inutiles à une passe. Lecture des secrets (`Read`), écriture dans `.claude/`, `.git/` et `.env` (`Edit`, `Write`), `WebFetch` et `WebSearch` refusés. Mode bypass désactivé. Canari deny.
+- Environnement de session dans settings.json : config git globale et système ignorées (alias, assistants d'identifiants, réécritures d'URL du poste), transport SSH désactivé, aucune invite d'identifiants, métriques semgrep coupées.
+- Copie jetable `scripts/prepare_sweep_clone.sh` : clone sans fichiers non suivis, sans remote, sans assistant d'identifiants, `.claude/` exclu des commits ; la configuration Claude fournie par le repo (`.claude/settings.json`, `settings.local.json`, `.mcp.json`) est mise en quarantaine, un `.claude` en lien symbolique est refusé. Refus d'installer dans une copie de travail vivante (fichiers de secrets non suivis, même définition que le hook) ou avec une configuration Claude fournie par le repo.
+- Secrets dans les sorties : `scripts/redacted_secret_scan.py` remplace le grep de repli du secrets-hunter, qui affichait les valeurs. Il détecte aussi les JWT service_role et les tables d'identifiants en dur. `consolidate_findings.py` caviarde tout secret resté dans un finding avant écriture.
+- Contrôle d'hygiène : la liste des noms interdits était écrite en clair et divulguait les noms qu'elle protège. Remplacée par des empreintes salées, liste étendue, ajouts possibles hors repo (secret de CI, fichier local).
+- Phase 0 de `/security-sweep` : canaris deny et hook dans la session et dans un sous-agent, environnement de session, copie jetable. Arrêt au premier échec.
+
+Durcissements (P2/P3) :
+- Consolidation : un finding malformé n'efface plus les findings valides du même agent ; ids rendus uniques (GATE A non ambigu) ; champs souples normalisés avec avertissement.
+- Agents : règles communes d'hygiène de sortie et de refus ; trufflehog `--no-update` ; semgrep `--metrics=off` et pas de `--config auto` sous zero data retention. Couverture ajoutée : signatures asymétriques et en-têtes secrets des webhooks, flux temps réel, fraude au transfert et destinations libres des outils, magasins de prompts modifiables, plafonds de session, mécanique d'authentification et identifiants partagés, spécificités Supabase et PostgREST, XXE, archives, pickle de cache, cohérence au démarrage.
+- infra-reviewer citait encore une « vague 2026 » non sourcée, que la v0.2 annonçait avoir remplacée : corrigé (CVE-2025-30066).
+- recon-inventory, dependency-auditor et report-compiler passent de haiku à sonnet : l'inventaire alimente tous les autres agents, la priorisation des CVE demande du jugement, le résumé client est livré.
+- Bac à sable optionnel `settings.sandbox.json` : réseau limité aux bases de vulnérabilités, identifiants du poste illisibles, sans échappatoire, échec franc si indisponible.
+- Témoin : table d'identifiants en dur et outil de transfert à destination libre (18 attendus).
+- `FLEET_VERSION` signale les modifications non commitées de la flotte. CI : matrice du hook, tests d'intégration de l'installateur (53 contrôles), auto-tests, ShellCheck.
+
 ## 2026-08-10 : v0.3.1 : corrections post re-vérification
 
 Seconde passe adversariale (2 vérificateurs) confirmant les deux P0 résolus sans régression de sur-blocage. Résidus corrigés :

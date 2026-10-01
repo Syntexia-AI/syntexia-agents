@@ -1,0 +1,29 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.config/gh",
+        "~/.git-credentials",
+        "~/.netrc",
+        "~/.docker",
+        "~/.kube"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "pypi.org",
+        "files.pythonhosted.org",
+        "api.osv.dev",
+        "registry.npmjs.org",
+        "mirror.gcr.io",
+        "ghcr.io",
+        "pkg-containers.githubusercontent.com"
+      ]
+    }
+  }
+}
